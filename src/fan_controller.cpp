@@ -18,6 +18,7 @@ void fan_controller::do_move(fan_controller& rhs) {
     m_kp = rhs.m_kp;
     m_ki = rhs.m_ki;
     m_kd = rhs.m_kd;
+    m_pwm_duty = rhs.m_pwm_duty;
     m_pwm_callback = rhs.m_pwm_callback;
     m_pwm_callback_state = rhs.m_pwm_callback_state;
     m_tach_pin = rhs.m_tach_pin;
@@ -30,11 +31,11 @@ fan_controller& fan_controller::operator=(fan_controller&& rhs) {
     do_move(rhs);
     return *this;
 }
-fan_controller::fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, unsigned int max_rpm) : m_rpm(-1), m_target_rpm(-1), m_last_update_ts(0), m_max_rpm(max_rpm),m_ticks_per_revolution(0), m_period_secs(0), m_kp(0),m_ki(0),m_kd(0),m_pwm_callback(pwm_callback),m_pwm_callback_state(pwm_callback_state),m_tach_pin(-1), m_ticks(-1) {
+fan_controller::fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, unsigned int max_rpm) : m_rpm(-1), m_target_rpm(-1), m_last_update_ts(0), m_max_rpm(max_rpm),m_ticks_per_revolution(0), m_period_secs(0), m_kp(0),m_ki(0),m_kd(0),m_pwm_duty(0), m_pwm_callback(pwm_callback),m_pwm_callback_state(pwm_callback_state),m_tach_pin(-1), m_ticks(-1) {
 
 }
 // configure for a 4-pin fan (with tach)
-fan_controller::fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int max_rpm, unsigned int ticks_per_revolution, float period_secs, float kp,float ki,float kd) : m_rpm(-1), m_target_rpm(-1), m_last_update_ts(0), m_max_rpm(max_rpm),m_ticks_per_revolution(ticks_per_revolution), m_period_secs(period_secs), m_kp(kp),m_ki(ki),m_kd(kd),m_pwm_callback(pwm_callback),m_pwm_callback_state(pwm_callback_state),m_tach_pin(tach_pin), m_ticks(-1) {
+fan_controller::fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int max_rpm, unsigned int ticks_per_revolution, float period_secs, float kp,float ki,float kd) : m_rpm(-1), m_target_rpm(-1), m_last_update_ts(0), m_max_rpm(max_rpm),m_ticks_per_revolution(ticks_per_revolution), m_period_secs(period_secs), m_kp(kp),m_ki(ki),m_kd(kd),m_pwm_duty(0), m_pwm_callback(pwm_callback),m_pwm_callback_state(pwm_callback_state),m_tach_pin(tach_pin), m_ticks(-1) {
 }
 // initialize the library
 bool fan_controller::initialize() {
@@ -62,12 +63,25 @@ void fan_controller::rpm(unsigned int value) {
     }
     m_target_rpm = value;
 }
+// retrieve the PWM duty
+uint8_t fan_controller::pwm_duty() const {
+    return m_pwm_duty;
+}
+// set the current PWM duty
+void fan_controller::pwm_duty(uint8_t value) {
+    m_pwm_duty = value;
+    m_target_rpm = -1;
+    if(m_pwm_callback!=nullptr) {
+        m_pwm_callback(m_pwm_duty,m_pwm_callback_state);
+    }
+}
 // call in a loop to keep the fan updating
 void fan_controller::update() {
     if(0>m_tach_pin) {
         if(m_target_rpm!=-1) {
+            m_pwm_duty = ((float)m_target_rpm/(float)m_max_rpm)*255+.5;
             if(m_pwm_callback!=nullptr) {
-                m_pwm_callback(((float)m_target_rpm/(float)m_max_rpm)*255+.5,m_pwm_callback_state);
+                m_pwm_callback(m_pwm_duty,m_pwm_callback_state);
             }
             m_target_rpm = -1;
         }
@@ -83,10 +97,10 @@ void fan_controller::update() {
             float deadband_delta= m_pid_ctx.p_term + m_pid_ctx.i_term + m_pid_ctx.d_term;
             if ((deadband_delta != deadband_delta) || (fabsf(deadband_delta) >= 0)) {
                 epid_pid_sum(&m_pid_ctx, m_target_rpm, m_max_rpm);
+                const int tmp = lroundf(m_pid_ctx.y_out);
+                m_pwm_duty = (uint8_t)(((float)tmp/(float)m_max_rpm)*255+.5);
                 if(m_pwm_callback!=nullptr) {
-                    const int tmp = lroundf(m_pid_ctx.y_out);
-                    const uint8_t duty = (uint8_t)(((float)tmp/(float)m_max_rpm)*255+.5);
-                    m_pwm_callback(duty,m_pwm_callback_state);
+                    m_pwm_callback(m_pwm_duty,m_pwm_callback_state);
                 }
             }
         }

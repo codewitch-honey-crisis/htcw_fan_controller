@@ -28,6 +28,7 @@ namespace arduino {
         float m_kp;
         float m_ki;
         float m_kd;
+        uint8_t m_pwm_duty;
         fan_controller_pwm_callback m_pwm_callback;
         void* m_pwm_callback_state;
         int16_t m_tach_pin;
@@ -52,6 +53,10 @@ namespace arduino {
         int rpm() const;
         // set the RPM
         void rpm(unsigned int value);
+        // retrieve the PWM duty
+        uint8_t pwm_duty() const;
+        // set the PWM duty
+        void pwm_duty(uint8_t value);
         // call in a loop to keep the fan updating
         void update();
     };
