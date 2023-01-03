@@ -41,7 +41,7 @@ fan_controller::fan_controller(fan_controller_pwm_callback pwm_callback, void* p
 
 }
 // configure for a 4-pin fan (with tach)
-fan_controller::fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int max_rpm, unsigned int ticks_per_revolution, float kp,float ki,float kd) : m_rpm(NAN), m_target_rpm(NAN), m_last_update_ts(0),m_last_update_ts_old(0), m_max_rpm(max_rpm),m_ticks_per_revolution(ticks_per_revolution), m_kp(kp),m_ki(ki),m_kd(kd),m_pwm_duty(0), m_pwm_callback(pwm_callback),m_pwm_callback_state(pwm_callback_state),m_tach_pin(tach_pin),m_initialized(false) {
+fan_controller::fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int max_rpm, unsigned int ticks_per_revolution, float kp,float ki,float kd) : m_rpm(0), m_target_rpm(NAN), m_last_update_ts(0),m_last_update_ts_old(0), m_max_rpm(max_rpm),m_ticks_per_revolution(ticks_per_revolution), m_kp(kp),m_ki(ki),m_kd(kd),m_pwm_duty(0), m_pwm_callback(pwm_callback),m_pwm_callback_state(pwm_callback_state),m_tach_pin(tach_pin),m_initialized(false) {
 }
 // initialize the library
 bool fan_controller::initialize() {
@@ -51,10 +51,10 @@ bool fan_controller::initialize() {
                 return false;
             }
             m_ticks=0;
+            m_rpm = 0;
             attachInterruptArg(m_tach_pin,tick_counter,this,RISING);
         }
         m_ticks=0;
-        m_rpm=NAN;
         m_initialized = true;
     }
     return true;
@@ -98,8 +98,11 @@ void fan_controller::update() {
         }
         return;
     }
-    if(m_last_update_ts>m_last_update_ts_old && m_last_update_ts_old!=0) {
+    if(m_last_update_ts>=m_last_update_ts_old && m_last_update_ts_old!=0) {
         m_rpm = (60*1000.0)/(m_last_update_ts-m_last_update_ts_old);
+        if(millis()-m_last_update_ts>125) {
+            m_rpm = 0.0;
+        }
     }
 
     if(m_target_rpm==m_target_rpm) {
@@ -114,5 +117,4 @@ void fan_controller::update() {
             }
         }
     }
-
 }
