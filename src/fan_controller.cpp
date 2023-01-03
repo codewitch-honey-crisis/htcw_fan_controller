@@ -46,8 +46,8 @@ fan_controller::fan_controller(fan_controller_pwm_callback pwm_callback, void* p
 }
 // initialize the library
 bool fan_controller::initialize() {
-    m_first = true;
     if(!m_initialized) {
+        m_first = true;
         if(-1<m_tach_pin) {
             m_ticks=0;
             m_rpm =0;
@@ -100,7 +100,7 @@ void fan_controller::update() {
     
     if(m_last_update_ts>=m_last_update_ts_old && m_last_update_ts_old!=0) {
         m_rpm = (60*1000.0)/(m_last_update_ts-m_last_update_ts_old);
-        if(millis()-m_last_update_ts>125) {
+        if(millis()-m_last_update_ts>500) {
             m_rpm = 0.0;
         }
     }
