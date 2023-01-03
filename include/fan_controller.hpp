@@ -19,6 +19,7 @@ namespace arduino {
     typedef void (*fan_controller_pwm_callback)(uint8_t duty,void* state);
     class fan_controller final {
         epid_t m_pid_ctx;
+        bool m_first;
         float m_rpm;
         float m_target_rpm;
         volatile uint32_t m_last_update_ts;
