@@ -19,12 +19,13 @@ namespace arduino {
     typedef void (*fan_controller_pwm_callback)(uint8_t duty,void* state);
     class fan_controller final {
         epid_t m_pid_ctx;
-        int m_rpm;
-        int m_target_rpm;
-        uint32_t m_last_update_ts;
+        float m_rpm;
+        float m_target_rpm;
+        volatile uint32_t m_last_update_ts;
+        volatile uint32_t m_last_update_ts_old;
+        uint32_t m_last_adjust_ts;
         unsigned int m_max_rpm;
         unsigned int m_ticks_per_revolution;
-        float m_period_secs;
         float m_kp;
         float m_ki;
         float m_kd;
@@ -33,6 +34,7 @@ namespace arduino {
         void* m_pwm_callback_state;
         int16_t m_tach_pin;
         volatile int m_ticks;
+        bool m_initialized;
         #ifdef ESP32
         IRAM_ATTR
         #endif
@@ -44,15 +46,17 @@ namespace arduino {
         // configure for a 3-pin fan (no tach)
         fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, unsigned int max_rpm);
         // configure for a 4-pin fan (with tach)
-        fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int max_rpm, unsigned int ticks_per_revolution = 2, float period_secs=1.0, float kp = 0.4f,float ki=0.4f,float kd = 0.05f);
+        fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int max_rpm, unsigned int ticks_per_revolution = 2, float kp = 0.4f,float ki=0.4f,float kd = 0.05f);
         fan_controller(fan_controller&& rhs);
         fan_controller& operator=(fan_controller&& rhs);
         // initialize the library
         bool initialize();
-        // retrieve the RPM
-        int rpm() const;
+        // retrieve the maximum RPM
+        float max_rpm() const;
+        // retrieve the RPM (NaN if not available)
+        float rpm() const;
         // set the RPM
-        void rpm(unsigned int value);
+        void rpm(float value);
         // retrieve the PWM duty
         uint8_t pwm_duty() const;
         // set the PWM duty
