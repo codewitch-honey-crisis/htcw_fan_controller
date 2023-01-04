@@ -18,23 +18,24 @@ While manual tuning can be very effective at setting a PID circuit for your spec
 namespace arduino {
     typedef void (*fan_controller_pwm_callback)(uint8_t duty,void* state);
     class fan_controller final {
+        struct tick_data {
+            unsigned int ticks_per_revolution;
+            volatile uint32_t last_update_ts;
+            volatile uint32_t last_update_ts_old;
+            volatile int ticks;
+        };
         epid_t m_pid_ctx;
         bool m_first;
         float m_rpm;
         float m_target_rpm;
-        volatile uint32_t m_last_update_ts;
-        volatile uint32_t m_last_update_ts_old;
-        uint32_t m_last_adjust_ts;
-        unsigned int m_max_rpm;
-        unsigned int m_ticks_per_revolution;
+        float m_max_rpm;
         float m_kp;
         float m_ki;
-        float m_kd;
         uint8_t m_pwm_duty;
         fan_controller_pwm_callback m_pwm_callback;
         void* m_pwm_callback_state;
         int16_t m_tach_pin;
-        volatile int m_ticks;
+        tick_data m_tick_data;
         bool m_initialized;
         #ifdef ESP32
         IRAM_ATTR
@@ -45,9 +46,9 @@ namespace arduino {
         fan_controller& operator=(const fan_controller& rhs)=delete;
     public:
         // configure for a 3-pin fan (no tach)
-        fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, unsigned int max_rpm);
+        fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, float max_rpm);
         // configure for a 4-pin fan (with tach)
-        fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int max_rpm, unsigned int ticks_per_revolution = 2, float kp = 0.4f,float ki=0.4f,float kd = 0.05f);
+        fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, float max_rpm, unsigned int ticks_per_revolution = 2, float kp = 0.4f,float ki=0.4f);
         fan_controller(fan_controller&& rhs);
         fan_controller& operator=(fan_controller&& rhs);
         // initialize the library
@@ -64,5 +65,10 @@ namespace arduino {
         void pwm_duty(uint8_t value);
         // call in a loop to keep the fan updating
         void update();
+
+        // Find the maximum effective stable RPM. Must be called before initialize()
+        static float find_max_rpm(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int ticks_per_revolution = 2);
+        // Find the minimum effective stable RPM. Must be called before initialize()
+        static float find_min_rpm(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int ticks_per_revolution = 2,float response_delay_secs = .1);
     };
 }
