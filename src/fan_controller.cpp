@@ -64,6 +64,15 @@ bool fan_controller::initialize() {
     }
     return true;
 }
+// deinitalize the library
+void fan_controller::deinitialize() {
+    if(m_initialized) {
+        if(m_tach_pin>-1) {
+            detachInterrupt(m_tach_pin);
+        }
+        m_initialized = false;
+    }
+}
 // retrieve the max RPM
 float fan_controller::max_rpm() const {
     return m_max_rpm;
@@ -135,6 +144,7 @@ void fan_controller::update() {
         }
     }
 }
+// Find the maximum effective stable RPM. Must be called before initialize()
 float fan_controller::find_max_rpm(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int ticks_per_revolution) {
     if(pwm_callback!=nullptr) {
         pwm_callback(255,nullptr);
@@ -180,6 +190,7 @@ float fan_controller::find_max_rpm(fan_controller_pwm_callback pwm_callback, voi
     detachInterrupt(tach_pin);
     return 0;
 }
+// Find the minimum effective stable RPM. Must be called before initialize()
 float fan_controller::find_min_rpm(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int ticks_per_revolution, float response_delay_secs) {
     if(pwm_callback!=nullptr) {
         pwm_callback(0,nullptr);

@@ -1,6 +1,6 @@
 {
     "name": "htcw_fan_controller",
-    "version": "0.2.4",
+    "version": "0.2.5",
     "description": "Provides a class for controlling PWM based 3-pin and 4-pin fans",
     "keywords": ["fan", "io", "pid", "pwm"],
     "authors": {

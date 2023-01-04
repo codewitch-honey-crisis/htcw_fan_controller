@@ -53,6 +53,8 @@ namespace arduino {
         fan_controller& operator=(fan_controller&& rhs);
         // initialize the library
         bool initialize();
+        // deinitialize the library
+        void deinitialize();
         // retrieve the maximum RPM
         float max_rpm() const;
         // retrieve the RPM (NaN if not available)
