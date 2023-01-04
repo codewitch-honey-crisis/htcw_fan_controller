@@ -31,7 +31,9 @@ namespace arduino {
         float m_max_rpm;
         float m_kp;
         float m_ki;
+        float m_max_update_period_secs;
         uint8_t m_pwm_duty;
+        uint32_t m_last_update_ts;
         fan_controller_pwm_callback m_pwm_callback;
         void* m_pwm_callback_state;
         int16_t m_tach_pin;
@@ -48,7 +50,7 @@ namespace arduino {
         // configure for a 3-pin fan (no tach)
         fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, float max_rpm);
         // configure for a 4-pin fan (with tach)
-        fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, float max_rpm, unsigned int ticks_per_revolution = 2, float kp = 0.4f,float ki=0.4f);
+        fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, float max_rpm, unsigned int ticks_per_revolution = 2, float kp = 0.4f,float ki=0.4f, float max_update_period_secs = .25);
         fan_controller(fan_controller&& rhs);
         fan_controller& operator=(fan_controller&& rhs);
         // initialize the library

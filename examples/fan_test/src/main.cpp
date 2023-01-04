@@ -35,8 +35,8 @@ void setup()
   fan.rpm(fan.max_rpm()/2);
 }
 void loop() {
-  if(millis()>ts+250) {
-      fan.update();
+  fan.update();
+  if(millis()>ts+250) {  
       ts=millis();
       switch(state) {
         case 50:

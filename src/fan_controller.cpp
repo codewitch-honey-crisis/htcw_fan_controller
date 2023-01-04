@@ -20,7 +20,9 @@ void fan_controller::do_move(fan_controller& rhs) {
     m_max_rpm = rhs.m_max_rpm;
     m_kp = rhs.m_kp;
     m_ki = rhs.m_ki;
+    m_max_update_period_secs = rhs.m_max_update_period_secs;
     m_pwm_duty = rhs.m_pwm_duty;
+    m_last_update_ts = rhs.m_last_update_ts;
     m_pwm_callback = rhs.m_pwm_callback;
     m_pwm_callback_state = rhs.m_pwm_callback_state;
     m_tach_pin = rhs.m_tach_pin;
@@ -38,7 +40,7 @@ fan_controller::fan_controller(fan_controller_pwm_callback pwm_callback, void* p
 
 }
 // configure for a 4-pin fan (with tach)
-fan_controller::fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, float max_rpm, unsigned int ticks_per_revolution, float kp,float ki) : m_rpm(0), m_target_rpm(NAN), m_max_rpm(max_rpm), m_kp(kp),m_ki(ki),m_pwm_duty(0), m_pwm_callback(pwm_callback),m_pwm_callback_state(pwm_callback_state),m_tach_pin(tach_pin),m_initialized(false) {
+fan_controller::fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, float max_rpm, unsigned int ticks_per_revolution, float kp,float ki, float max_update_period_secs) : m_rpm(0), m_target_rpm(NAN), m_max_rpm(max_rpm), m_kp(kp),m_ki(ki),m_max_update_period_secs(max_update_period_secs), m_pwm_duty(0), m_pwm_callback(pwm_callback),m_pwm_callback_state(pwm_callback_state),m_tach_pin(tach_pin),m_initialized(false) {
     m_tick_data.last_update_ts = 0;
     m_tick_data.last_update_ts_old = 0;
     m_tick_data.ticks = 0;
@@ -57,7 +59,9 @@ bool fan_controller::initialize() {
         if(-1<m_tach_pin) {
             m_tick_data.ticks=0;
             m_rpm =0;
+            m_last_update_ts = 0;
             attachInterruptArg(m_tach_pin,tick_counter,&m_tick_data,RISING);
+            
         }
         m_tick_data.ticks=0;
         m_initialized = true;
@@ -112,13 +116,16 @@ void fan_controller::update() {
         }
         return;
     }
-    
     if(m_tick_data.last_update_ts>=m_tick_data.last_update_ts_old && m_tick_data.last_update_ts_old!=0) {
         m_rpm = (60*1000.0)/(m_tick_data.last_update_ts-m_tick_data.last_update_ts_old);
         if(millis()-m_tick_data.last_update_ts>500) {
             m_rpm = 0.0;
         }
     }
+    if(0!=m_max_update_period_secs && millis()<m_last_update_ts+(1000*m_max_update_period_secs)) {
+        return;
+    }
+    m_last_update_ts = millis();
     if(m_first) {
         float pwm = (m_rpm/(float)m_max_rpm)*255 ;
         if(EPID_ERR_NONE!=epid_init(&m_pid_ctx,pwm,pwm,0,m_kp,m_ki,/*m_kd*/0)) {
