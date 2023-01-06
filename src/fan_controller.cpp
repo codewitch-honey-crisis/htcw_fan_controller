@@ -93,11 +93,11 @@ void fan_controller::rpm(float value) {
     m_target_rpm = value;
 }
 // retrieve the PWM duty
-uint8_t fan_controller::pwm_duty() const {
+uint16_t fan_controller::pwm_duty() const {
     return m_pwm_duty;
 }
 // set the current PWM duty
-void fan_controller::pwm_duty(uint8_t value) {
+void fan_controller::pwm_duty(uint16_t value) {
     m_pwm_duty = value;
     m_target_rpm = NAN;
     if(m_pwm_callback!=nullptr) {
