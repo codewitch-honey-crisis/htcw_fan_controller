@@ -16,7 +16,12 @@ While manual tuning can be very effective at setting a PID circuit for your spec
 */
 
 namespace arduino {
-    typedef void (*fan_controller_pwm_callback)(uint8_t duty,void* state);
+    enum struct fan_controller_tuning_method {
+      basic_pid,
+      less_overshoot,
+      no_overshoot
+    };
+    typedef void (*fan_controller_pwm_callback)(uint16_t duty,void* state);
     class fan_controller final {
         struct tick_data {
             unsigned int ticks_per_revolution;
@@ -32,7 +37,7 @@ namespace arduino {
         float m_kp;
         float m_ki;
         float m_max_update_period_secs;
-        uint8_t m_pwm_duty;
+        uint16_t m_pwm_duty;
         uint32_t m_last_update_ts;
         fan_controller_pwm_callback m_pwm_callback;
         void* m_pwm_callback_state;
@@ -64,9 +69,9 @@ namespace arduino {
         // set the RPM
         void rpm(float value);
         // retrieve the PWM duty
-        uint8_t pwm_duty() const;
+        uint16_t pwm_duty() const;
         // set the PWM duty
-        void pwm_duty(uint8_t value);
+        void pwm_duty(uint16_t value);
         // call in a loop to keep the fan updating
         void update();
 
@@ -74,5 +79,5 @@ namespace arduino {
         static float find_max_rpm(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int ticks_per_revolution = 2);
         // Find the minimum effective stable RPM. Must be called before initialize()
         static float find_min_rpm(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int ticks_per_revolution = 2,float response_delay_secs = .1);
-    };
+};
 }
