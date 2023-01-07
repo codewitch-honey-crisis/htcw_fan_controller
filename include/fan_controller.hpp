@@ -16,12 +16,8 @@ While manual tuning can be very effective at setting a PID circuit for your spec
 */
 
 namespace arduino {
-    enum struct fan_controller_tuning_method {
-      basic_pid,
-      less_overshoot,
-      no_overshoot
-    };
-    typedef void (*fan_controller_pwm_callback)(uint16_t duty,void* state);
+typedef void (*fan_controller_pwm_callback)(uint16_t duty, void* state);
+#ifdef ESP32
     class fan_controller final {
         struct tick_data {
             unsigned int ticks_per_revolution;
@@ -80,4 +76,334 @@ namespace arduino {
         // Find the minimum effective stable RPM. Must be called before initialize()
         static float find_min_rpm(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int ticks_per_revolution = 2,float response_delay_secs = .1);
 };
+#else // !ESP32
+template <int16_t TachPin = -1, unsigned TicksPerRevolution = 2>
+struct fan_controller final {
+    static constexpr const int16_t tach_pin = TachPin;
+    static constexpr const unsigned ticks_per_revolution = TicksPerRevolution;
+
+   private:
+    struct tick_data final {
+        volatile uint32_t last_update_ts;
+        volatile uint32_t last_update_ts_old;
+        volatile int ticks;
+    };
+    epid_t m_pid_ctx;
+    bool m_first;
+    float m_rpm;
+    float m_target_rpm;
+    float m_max_rpm;
+    float m_kp;
+    float m_ki;
+    float m_max_update_period_secs;
+    uint16_t m_pwm_duty;
+    uint32_t m_last_update_ts;
+    fan_controller_pwm_callback m_pwm_callback;
+    void* m_pwm_callback_state;
+    static tick_data m_tick_data;
+    bool m_initialized;
+#if defined(IRAM_ATTR)
+    IRAM_ATTR
+#endif
+    static void tick_counter() {
+        if (++m_tick_data.ticks == ticks_per_revolution) {
+            m_tick_data.last_update_ts_old = m_tick_data.last_update_ts;
+            m_tick_data.last_update_ts = micros();
+            m_tick_data.ticks = 0;
+        }
+    }
+    void do_move(fan_controller& rhs) {
+        m_pid_ctx = rhs.m_pid_ctx;
+        m_first = rhs.m_first;
+        m_rpm = rhs.m_rpm;
+        m_target_rpm = rhs.m_target_rpm;
+        m_max_rpm = rhs.m_max_rpm;
+        m_kp = rhs.m_kp;
+        m_ki = rhs.m_ki;
+        m_max_update_period_secs = rhs.m_max_update_period_secs;
+        m_pwm_duty = rhs.m_pwm_duty;
+        m_last_update_ts = rhs.m_last_update_ts;
+        m_pwm_callback = rhs.m_pwm_callback;
+        m_pwm_callback_state = rhs.m_pwm_callback_state;
+        m_initialized = rhs.m_initialized;
+    }
+    fan_controller(const fan_controller& rhs) = delete;
+    fan_controller& operator=(const fan_controller& rhs) = delete;
+
+   public:
+    // configure for a 4-pin fan (with tach)
+    fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, float max_rpm, unsigned int ticks_per_revolution = 2, float kp = 0.4f, float ki = 0.4f, float max_update_period_secs = .25) : m_rpm(0), m_target_rpm(NAN), m_max_rpm(max_rpm), m_kp(kp), m_ki(ki), m_max_update_period_secs(max_update_period_secs), m_pwm_duty(0), m_pwm_callback(pwm_callback), m_pwm_callback_state(pwm_callback_state), m_initialized(false) {
+        m_tick_data.last_update_ts = 0;
+        m_tick_data.last_update_ts_old = 0;
+        m_tick_data.ticks = 0;
+    }
+    fan_controller(fan_controller&& rhs) {
+        do_move(rhs);
+    }
+    fan_controller& operator=(fan_controller&& rhs) {
+        do_move(rhs);
+        return *this;
+    }
+    // initialize the library
+    bool initialize() {
+        if (!m_initialized) {
+            if (m_max_rpm != m_max_rpm || 0 == m_max_rpm) {
+                m_max_rpm = find_max_rpm(m_pwm_callback, m_pwm_callback_state);
+                if (m_max_rpm == 0) {
+                    return false;
+                }
+            }
+            m_first = true;
+            m_tick_data.ticks = 0;
+            m_rpm = 0;
+            m_last_update_ts = 0;
+            attachInterrupt(tach_pin, tick_counter, RISING);
+            m_tick_data.ticks = 0;
+            m_initialized = true;
+        }
+        return true;
+    }
+    // deinitialize the library
+    void deinitialize() {
+        if (m_initialized) {
+            detachInterrupt(tach_pin);
+            m_initialized = false;
+        }
+    }
+    // retrieve the maximum RPM
+    float max_rpm() const {
+        return m_max_rpm;
+    }
+    // retrieve the RPM (NaN if not available)
+    float rpm() const {
+        return m_rpm;
+    }
+    // set the RPM
+    void rpm(float value) {
+        if (value > m_max_rpm) {
+            value = m_max_rpm;
+        }
+        m_target_rpm = value;
+    }
+    // retrieve the PWM duty
+    uint16_t pwm_duty() const {
+        return m_pwm_duty;
+    }
+    // set the PWM duty
+    void pwm_duty(uint16_t value) {
+        m_pwm_duty = value;
+        m_target_rpm = NAN;
+        if (m_pwm_callback != nullptr) {
+            m_pwm_callback(m_pwm_duty, m_pwm_callback_state);
+        }
+    }
+    // call in a loop to keep the fan updating
+    void update() {
+        if (m_tick_data.last_update_ts >= m_tick_data.last_update_ts_old && m_tick_data.last_update_ts_old != 0) {
+            m_rpm = (60 * 1000.0 * 1000.0) / (m_tick_data.last_update_ts - m_tick_data.last_update_ts_old);
+            if (micros() - m_tick_data.last_update_ts > 500 * 1000) {
+                m_rpm = 0.0;
+            }
+        }
+        if (0 != m_max_update_period_secs && millis() < m_last_update_ts + (1000 * m_max_update_period_secs)) {
+            return;
+        }
+        m_last_update_ts = millis();
+        if (m_first) {
+            float pwm = (m_rpm / (float)m_max_rpm) * 65535;
+            if (EPID_ERR_NONE != epid_init(&m_pid_ctx, pwm, pwm, 0, m_kp, m_ki, /*m_kd*/ 0)) {
+                return;
+            }
+            m_first = false;
+        }
+        if (m_target_rpm == m_target_rpm) {
+            float target_pwm = (m_target_rpm / (float)m_max_rpm) * 65535;
+            if (target_pwm > 65535)
+                target_pwm = 65535;
+            float pwm = (m_rpm / (float)m_max_rpm) * 65535;
+            if (pwm > 65535)
+                pwm = 65535;
+            epid_pi_calc(&m_pid_ctx, target_pwm, pwm);
+            // epid_pid_calc(&m_pid_ctx,target_pwm, pwm);
+            float deadband_delta = m_pid_ctx.p_term + m_pid_ctx.i_term + m_pid_ctx.d_term;
+            if ((deadband_delta != deadband_delta) || (fabsf(deadband_delta) >= 0)) {
+                epid_pi_sum(&m_pid_ctx, 0, 65535);
+                // epid_pid_sum(&m_pid_ctx, 0, 65535);
+                m_pwm_duty = lround(m_pid_ctx.y_out);
+                if (m_pwm_callback != nullptr) {
+                    m_pwm_callback(m_pwm_duty, m_pwm_callback_state);
+                }
+            }
+        }
+    }
+
+    // Find the maximum effective stable RPM. Must be called before initialize()
+    static float find_max_rpm(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state) {
+        if (pwm_callback != nullptr) {
+            pwm_callback(65535, nullptr);
+        }
+        delay(5000);
+        m_tick_data.last_update_ts = 0;
+        m_tick_data.last_update_ts_old = 0;
+        m_tick_data.ticks = 0;
+        attachInterrupt(tach_pin, tick_counter, RISING);
+        float rpm = 0, rpm_old = 0;
+        static const int max_count = 20;
+        float max_rpm = NAN;
+        int zero_count = 0, count = 0;
+        for (int tries = 0; tries < 20; ++tries) {
+            if (m_tick_data.last_update_ts >= m_tick_data.last_update_ts_old && m_tick_data.last_update_ts_old != 0) {
+                float prev = rpm_old;
+                rpm_old = rpm;
+
+                rpm = (60 * 1000.0 * 1000.0) / (m_tick_data.last_update_ts - m_tick_data.last_update_ts_old);
+                if (micros() - m_tick_data.last_update_ts > 500 * 1000) {
+                    rpm = 0;
+                }
+                if (prev != rpm) {
+                    continue;
+                }
+                if (rpm == 0) {
+                    // exit if we're just getting zeroes
+                    if (++zero_count >= max_count * 5) {
+                        break;
+                    }
+                    continue;
+                }
+                if (++count = max_count) {
+                    detachInterrupt(tach_pin);
+                    return rpm;
+                }
+            }
+            delay(100);
+        }
+        detachInterrupt(tach_pin);
+        return 0;
+    }
+    // Find the minimum effective stable RPM. Must be called before initialize()
+    static float find_min_rpm(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, float response_delay_secs = .1) {
+        if (pwm_callback != nullptr) {
+            pwm_callback(0, nullptr);
+        } else {
+            return 0;
+        }
+        delay(1000);
+        float rpm = NAN;
+        m_tick_data.last_update_ts = 0;
+        m_tick_data.last_update_ts_old = 0;
+        m_tick_data.ticks = 0;
+        
+        attachInterrupt(tach_pin, tick_counter, RISING);
+        int pwm_duty;
+        for (pwm_duty = 1 << 8; pwm_duty < 65536; pwm_duty += (1 << 8)) {
+            if (pwm_callback != nullptr) {
+                pwm_callback(pwm_duty, nullptr);
+            }
+            for (int i = 0; i < 10; ++i) {
+                if (m_tick_data.last_update_ts >= m_tick_data.last_update_ts_old && m_tick_data.last_update_ts_old != 0) {
+                    rpm = (60 * 1000.0 * 1000.0) / (m_tick_data.last_update_ts - m_tick_data.last_update_ts_old);
+                    if (micros() - (m_tick_data.last_update_ts) > 500 * 1000) {
+                        rpm = 0;
+                    }
+                    if (rpm != 0) {
+                        detachInterrupt(tach_pin);
+                        return rpm;
+                    }
+                }
+                delay(1000 * response_delay_secs);
+            }
+        }
+        detachInterrupt(tach_pin);
+        return 0;
+    }
+};
+template <unsigned TicksPerRevolution> 
+struct fan_controller<-1,TicksPerRevolution> final {
+    
+   private:
+    float m_rpm;
+    float m_target_rpm;
+    float m_max_rpm;
+    uint16_t m_pwm_duty;
+    fan_controller_pwm_callback m_pwm_callback;
+    void* m_pwm_callback_state;
+    bool m_initialized;
+    void do_move(fan_controller& rhs) {
+        m_rpm = rhs.m_rpm;
+        m_target_rpm = rhs.m_target_rpm;
+        m_max_rpm = rhs.m_max_rpm;
+        m_pwm_duty = rhs.m_pwm_duty;
+        m_pwm_callback = rhs.m_pwm_callback;
+        m_pwm_callback_state = rhs.m_pwm_callback_state;
+        m_initialized = rhs.m_initialized;
+    }
+    fan_controller(const fan_controller& rhs) = delete;
+    fan_controller& operator=(const fan_controller& rhs) = delete;
+
+   public:
+    // configure for a 3-pin fan (with no tach)
+    fan_controller(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, float max_rpm) : m_rpm(0), m_target_rpm(NAN), m_max_rpm(max_rpm), m_pwm_duty(0), m_pwm_callback(pwm_callback), m_pwm_callback_state(pwm_callback_state), m_initialized(false) {
+    }
+    fan_controller(fan_controller&& rhs) {
+        do_move(rhs);
+    }
+    fan_controller& operator=(fan_controller&& rhs) {
+        do_move(rhs);
+        return *this;
+    }
+    // initialize the library
+    bool initialize() {
+        if (!m_initialized) {
+            m_rpm = 0;
+            m_pwm_duty = 0;
+            m_initialized = true;
+        }
+        return true;
+    }
+    // deinitialize the library
+    void deinitialize() {
+        m_initialized = false;
+    }
+    // retrieve the maximum rated RPM
+    float max_rpm() const {
+        return m_max_rpm;
+    }
+    // retrieve the approx RPM
+    float rpm() const {
+        return (m_pwm_duty/65535.0)*m_max_rpm;
+    }
+    // set the approx RPM
+    void rpm(float value) {
+        if (value > m_max_rpm) {
+            value = m_max_rpm;
+        }
+        m_target_rpm = value;
+    }
+    // retrieve the PWM duty
+    uint16_t pwm_duty() const {
+        return m_pwm_duty;
+    }
+    // set the PWM duty
+    void pwm_duty(uint16_t value) {
+        m_pwm_duty = value;
+        m_target_rpm = NAN;
+        if (m_pwm_callback != nullptr) {
+            m_pwm_callback(m_pwm_duty, m_pwm_callback_state);
+        }
+    }
+    // call in a loop to keep the fan updating
+    void update() {
+        if (m_target_rpm == m_target_rpm) {
+            m_pwm_duty = ((float)m_target_rpm / (float)m_max_rpm) * 65535 + .5;
+            if (m_pwm_callback != nullptr) {
+                m_pwm_callback(m_pwm_duty, m_pwm_callback_state);
+            }
+            m_target_rpm = NAN;
+        }
+    }
+};
+template <int16_t TachPin, unsigned TicksPerRevolution>
+typename fan_controller<TachPin,TicksPerRevolution>::tick_data
+fan_controller<TachPin,TicksPerRevolution>::m_tick_data = {0};
+#endif
 }

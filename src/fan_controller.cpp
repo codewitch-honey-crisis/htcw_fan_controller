@@ -1,3 +1,4 @@
+#ifdef ESP32
 #include <fan_controller.hpp>
 using namespace arduino;
 #ifdef ESP32
@@ -108,7 +109,7 @@ void fan_controller::pwm_duty(uint16_t value) {
 void fan_controller::update() {
     if(0>m_tach_pin) {
         if(m_target_rpm==m_target_rpm) {
-            m_pwm_duty = ((float)m_target_rpm/(float)m_max_rpm)*255+.5;
+            m_pwm_duty = ((float)m_target_rpm/(float)m_max_rpm)*65535+.5;
             if(m_pwm_callback!=nullptr) {
                 m_pwm_callback(m_pwm_duty,m_pwm_callback_state);
             }
@@ -127,23 +128,23 @@ void fan_controller::update() {
     }
     m_last_update_ts = millis();
     if(m_first) {
-        float pwm = (m_rpm/(float)m_max_rpm)*255 ;
+        float pwm = (m_rpm/(float)m_max_rpm)*65535 ;
         if(EPID_ERR_NONE!=epid_init(&m_pid_ctx,pwm,pwm,0,m_kp,m_ki,/*m_kd*/0)) {
             return;
         }
         m_first = false;
     }
     if(m_target_rpm==m_target_rpm) {
-        float target_pwm = (m_target_rpm/(float)m_max_rpm)*255 ;
-        if(target_pwm>255) target_pwm = 255;
-        float pwm = (m_rpm/(float)m_max_rpm)*255 ;
-        if(pwm>255) pwm = 255;
+        float target_pwm = (m_target_rpm/(float)m_max_rpm)*65535 ;
+        if(target_pwm>65535) target_pwm = 65535;
+        float pwm = (m_rpm/(float)m_max_rpm)*65535 ;
+        if(pwm>65535) pwm = 65535;
         epid_pi_calc(&m_pid_ctx,target_pwm, pwm);
         //epid_pid_calc(&m_pid_ctx,target_pwm, pwm);
         float deadband_delta= m_pid_ctx.p_term + m_pid_ctx.i_term + m_pid_ctx.d_term;
         if ((deadband_delta != deadband_delta) || (fabsf(deadband_delta) >= 0)) {
-            epid_pi_sum(&m_pid_ctx, 0, 255);
-            //epid_pid_sum(&m_pid_ctx, 0, 255);
+            epid_pi_sum(&m_pid_ctx, 0, 65535);
+            //epid_pid_sum(&m_pid_ctx, 0, 65535);
             m_pwm_duty = lround(m_pid_ctx.y_out);
             if(m_pwm_callback!=nullptr) {
                 m_pwm_callback(m_pwm_duty,m_pwm_callback_state);
@@ -154,7 +155,7 @@ void fan_controller::update() {
 // Find the maximum effective stable RPM. Must be called before initialize()
 float fan_controller::find_max_rpm(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int ticks_per_revolution) {
     if(pwm_callback!=nullptr) {
-        pwm_callback(255,nullptr);
+        pwm_callback(65535,nullptr);
     }
     delay(5000);
     tick_data data;
@@ -213,7 +214,7 @@ float fan_controller::find_min_rpm(fan_controller_pwm_callback pwm_callback, voi
     data.ticks_per_revolution = ticks_per_revolution;
     attachInterruptArg(tach_pin,tick_counter,&data,RISING);
     int pwm_duty;
-    for(pwm_duty = 1;pwm_duty<256;++pwm_duty) {
+    for(pwm_duty = 1;pwm_duty<65536;pwm_duty+=256) {
         if(pwm_callback!=nullptr) {
             pwm_callback(pwm_duty,nullptr);
         }
@@ -256,3 +257,4 @@ float fan_controller::find_min_rpm(fan_controller_pwm_callback pwm_callback, voi
     detachInterrupt(tach_pin);
     return 0;
 }
+#endif
