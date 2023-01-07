@@ -5,13 +5,27 @@ using namespace arduino;
 #define TACH_PIN 22
 #define MAX_RPM NAN
 #ifdef ESP32
+static void pwm_init() {
+  ledcAttachPin(PWM_PIN, 0);
+  ledcSetup(0, 25 * 1000, 8);
+}
 static void pwm_set(uint16_t value, void *state)
 {
   // output is 8-bit
   ledcWrite(0, value>>8);
 }
 static fan_controller fan(pwm_set,nullptr,TACH_PIN,MAX_RPM);
+
+static float get_min_rpm() {
+   return fan_controller::find_min_rpm(pwm_set,nullptr,TACH_PIN);
+}
 #else
+static void get_min_rpm() {
+   return fan_controller::find_min_rpm(pwm_set,nullptr,TACH_PIN);
+}
+static void pwm_init() {
+ 
+}
 static void pwm_set(uint16_t value, void *state)
 {
   Serial.print("TODO: Write ");
@@ -20,6 +34,9 @@ static void pwm_set(uint16_t value, void *state)
 }
 using fan_ctrl = fan_controller<TACH_PIN>;
 static fan_ctrl fan(pwm_set,nullptr,MAX_RPM);
+static float get_min_rpm() {
+   return fan_ctrl::find_min_rpm(pwm_set,nullptr);
+}
 #endif
 
 static int state = 0;
@@ -27,19 +44,12 @@ static uint32_t ts=0;
 static float min_rpm=NAN;
 void setup()
 {
-#ifdef ESP32
-  ledcAttachPin(PWM_PIN, 0);
-  ledcSetup(0, 25 * 1000, 8);
-#endif
   Serial.begin(115200);
+  pwm_init();
   Serial.println("Finding minimum RPM...");
   min_rpm = 0;
 #if TACH_PIN > -1
-#ifdef ESP32
-  min_rpm = fan_controller::find_min_rpm(pwm_set,nullptr,TACH_PIN);
-#else
-  min_rpm = fan_ctrl::find_min_rpm(pwm_set,nullptr);
-#endif
+  min_rpm = get_min_rpm();
 #endif
   Serial.println("Finding maximum RPM...");
   // since we passed NAN for max RPM it will be detected on init
@@ -89,5 +99,6 @@ void loop() {
       Serial.print((fan.pwm_duty()/65535.0)*100.0);
       Serial.println("% duty");
       
-    }  
+    }
+  
 }

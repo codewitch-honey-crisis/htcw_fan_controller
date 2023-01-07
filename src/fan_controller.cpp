@@ -1,7 +1,7 @@
 #ifdef ESP32
 #include <fan_controller.hpp>
 using namespace arduino;
-#ifdef ESP32
+#if defined(IRAM_ATTR)
 IRAM_ATTR
 #endif
 void fan_controller::tick_counter(void* state) {
@@ -14,13 +14,17 @@ void fan_controller::tick_counter(void* state) {
 }
 
 void fan_controller::do_move(fan_controller& rhs) {
-    m_pid_ctx = rhs.m_pid_ctx;
     m_first = rhs.m_first;
     m_rpm = rhs.m_rpm;
     m_target_rpm = rhs.m_target_rpm;
     m_max_rpm = rhs.m_max_rpm;
     m_kp = rhs.m_kp;
     m_ki = rhs.m_ki;
+    m_xk1 = rhs.m_xk1;
+    m_xk2 = rhs.m_xk2;
+    m_y_out = rhs.m_y_out;
+    m_p_term = rhs.m_p_term;
+    m_i_term = rhs.m_i_term;
     m_max_update_period_secs = rhs.m_max_update_period_secs;
     m_pwm_duty = rhs.m_pwm_duty;
     m_last_update_ts = rhs.m_last_update_ts;
@@ -50,6 +54,9 @@ fan_controller::fan_controller(fan_controller_pwm_callback pwm_callback, void* p
 // initialize the library
 bool fan_controller::initialize() {
     if(!m_initialized) {
+        if(m_kp!=m_kp || m_ki!=m_ki) {
+            return false;
+        }
         if(m_max_rpm!=m_max_rpm || 0==m_max_rpm && m_tach_pin>-1) {
             m_max_rpm=find_max_rpm(m_pwm_callback,m_pwm_callback_state,m_tach_pin,m_tick_data.ticks_per_revolution);
             if(m_max_rpm==0) {
@@ -129,9 +136,8 @@ void fan_controller::update() {
     m_last_update_ts = millis();
     if(m_first) {
         float pwm = (m_rpm/(float)m_max_rpm)*65535 ;
-        if(EPID_ERR_NONE!=epid_init(&m_pid_ctx,pwm,pwm,0,m_kp,m_ki,/*m_kd*/0)) {
-            return;
-        }
+        m_xk1 = m_xk2 = pwm;
+        m_y_out = 0;
         m_first = false;
     }
     if(m_target_rpm==m_target_rpm) {
@@ -139,13 +145,24 @@ void fan_controller::update() {
         if(target_pwm>65535) target_pwm = 65535;
         float pwm = (m_rpm/(float)m_max_rpm)*65535 ;
         if(pwm>65535) pwm = 65535;
-        epid_pi_calc(&m_pid_ctx,target_pwm, pwm);
-        //epid_pid_calc(&m_pid_ctx,target_pwm, pwm);
-        float deadband_delta= m_pid_ctx.p_term + m_pid_ctx.i_term + m_pid_ctx.d_term;
+        m_p_term = m_xk1 - pwm;
+        m_p_term = m_kp * m_p_term;
+        m_i_term = m_ki * (target_pwm - pwm);
+        m_xk2 = m_xk1;
+        m_xk1 = pwm;
+        float deadband_delta= m_p_term + m_i_term;
         if ((deadband_delta != deadband_delta) || (fabsf(deadband_delta) >= 0)) {
-            epid_pi_sum(&m_pid_ctx, 0, 65535);
-            //epid_pid_sum(&m_pid_ctx, 0, 65535);
-            m_pwm_duty = lround(m_pid_ctx.y_out);
+            const float y_prev = m_y_out;
+            m_y_out += m_p_term + m_i_term;
+            if(m_y_out!=m_y_out || m_p_term!=m_p_term||m_i_term!=m_i_term) {
+                m_y_out = y_prev;
+            }
+            if(m_y_out>65535) {
+                m_y_out = 65535;
+            } else if(m_y_out<0) {
+                m_y_out = 0;
+            }
+            m_pwm_duty = lround(m_y_out);
             if(m_pwm_callback!=nullptr) {
                 m_pwm_callback(m_pwm_duty,m_pwm_callback_state);
             }

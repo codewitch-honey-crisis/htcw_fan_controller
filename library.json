@@ -1,6 +1,6 @@
 {
     "name": "htcw_fan_controller",
-    "version": "0.4.0",
+    "version": "0.4.1",
     "description": "Provides a class for controlling PWM based 3-pin and 4-pin fans",
     "keywords": ["fan", "io", "pid", "pwm"],
     "authors": {
@@ -14,9 +14,6 @@
     {
         "type": "git",
         "url": "https://github.com/codewitch-honey-crisis/htcw_fan_controller.git"
-    },
-    "dependencies": {
-        "abderraouf-adjal/Embedded Type-C PID": "^1.1.3"
     },
     "examples": [
         {
