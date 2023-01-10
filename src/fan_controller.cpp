@@ -8,7 +8,7 @@ void fan_controller::tick_counter(void* state) {
     tick_data* pdata = (tick_data*)state;
     if(++pdata->ticks==pdata->ticks_per_revolution) {
         pdata->last_update_ts_old = pdata->last_update_ts;
-        pdata->last_update_ts = millis();
+        pdata->last_update_ts = micros();
         pdata->ticks = 0;
     }
 }
@@ -125,8 +125,8 @@ void fan_controller::update() {
         return;
     }
     if(m_tick_data.last_update_ts>=m_tick_data.last_update_ts_old && m_tick_data.last_update_ts_old!=0) {
-        m_rpm = (60*1000.0)/(m_tick_data.last_update_ts-m_tick_data.last_update_ts_old);
-        if(millis()-m_tick_data.last_update_ts>500) {
+        m_rpm = (60*1000.0*1000.0)/(m_tick_data.last_update_ts-m_tick_data.last_update_ts_old);
+        if(micros()-m_tick_data.last_update_ts>(500*1000)) {
             m_rpm = 0.0;
         }
     }
@@ -190,8 +190,8 @@ float fan_controller::find_max_rpm(fan_controller_pwm_callback pwm_callback, voi
             float prev = rpm_old;
             rpm_old = rpm;
             
-            rpm = (60*1000.0)/(data.last_update_ts-data.last_update_ts_old);
-            if(millis()-data.last_update_ts>500) {
+            rpm = (60*1000.0*1000.0)/(data.last_update_ts-data.last_update_ts_old);
+            if(micros()-data.last_update_ts>(500*1000.0)) {
                 rpm=0;
             }
             if(prev!=rpm) {
@@ -237,8 +237,8 @@ float fan_controller::find_min_rpm(fan_controller_pwm_callback pwm_callback, voi
         }
         for(int i = 0;i<10;++i) {
             if(data.last_update_ts>=data.last_update_ts_old && data.last_update_ts_old!=0) {
-                rpm = (60*1000.0)/(data.last_update_ts-data.last_update_ts_old);
-                if(millis()-data.last_update_ts>500) {
+                rpm = (60*1000.0*1000.0)/(data.last_update_ts-data.last_update_ts_old);
+                if(micros()-data.last_update_ts>(500*1000.0)) {
                     rpm=0;
                 }
                 if(rpm!=0) {
