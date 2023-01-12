@@ -73,7 +73,14 @@ typedef void (*fan_controller_pwm_callback)(uint16_t duty, void* state);
         void pwm_duty(uint16_t value);
         // call in a loop to keep the fan updating
         void update();
-
+        // gets the kp value. Used for tuning the adaptive PI(D) algorithm
+        float kp() const;
+        // sets the kp value. Used for tuning the adaptive PI(D) algorithm
+        void kp(float value);
+        // gets the ki value. Used for tuning the adaptive PI(D) algorithm
+        float ki() const;
+        // sets the ki value. Used for tuning the adaptive PI(D) algorithm
+        void ki(float value);
         // Find the maximum effective stable RPM. Must be called before initialize()
         static float find_max_rpm(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int ticks_per_revolution = 2);
         // Find the minimum effective stable RPM. Must be called before initialize()
@@ -423,6 +430,32 @@ struct fan_controller<-1,TicksPerRevolution> final {
                 m_pwm_callback(m_pwm_duty, m_pwm_callback_state);
             }
             m_target_rpm = NAN;
+        }
+    }
+    // gets the kp value. Used for tuning the adaptive PI(D) algorithm
+    float kp() const {
+        if(tach_pin>-1) {
+            return m_kp;
+        }
+        return NAN;
+    }
+    // sets the kp value. Used for tuning the adaptive PI(D) algorithm
+    void kp(float value) {
+        if(tach_pin>-1) {
+            m_kp=value;
+        }
+    }
+    // gets the ki value. Used for tuning the adaptive PI(D) algorithm
+    float ki() const {
+        if(tach_pin>-1) {
+            return m_ki;
+        }
+        return NAN;
+    }
+    // sets the ki value. Used for tuning the adaptive PI(D) algorithm
+    void ki(float value) {
+        if(tach_pin>-1) {
+            m_ki=value;
         }
     }
 };

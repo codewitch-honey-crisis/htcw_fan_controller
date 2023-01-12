@@ -169,6 +169,32 @@ void fan_controller::update() {
         }
     }
 }
+// gets the kp value. Used for tuning the adaptive PI(D) algorithm
+float fan_controller::kp() const {
+    if(m_tach_pin>-1) {
+        return m_kp;
+    }
+    return NAN;
+}
+// sets the kp value. Used for tuning the adaptive PI(D) algorithm
+void fan_controller::kp(float value) {
+    if(m_tach_pin>-1) {
+        m_kp=value;
+    }
+}
+// gets the ki value. Used for tuning the adaptive PI(D) algorithm
+float fan_controller::ki() const {
+    if(m_tach_pin>-1) {
+        return m_ki;
+    }
+    return NAN;
+}
+// sets the ki value. Used for tuning the adaptive PI(D) algorithm
+void fan_controller::ki(float value) {
+    if(m_tach_pin>-1) {
+        m_ki=value;
+    }
+}
 // Find the maximum effective stable RPM. Must be called before initialize()
 float fan_controller::find_max_rpm(fan_controller_pwm_callback pwm_callback, void* pwm_callback_state, uint8_t tach_pin, unsigned int ticks_per_revolution) {
     if(pwm_callback!=nullptr) {
