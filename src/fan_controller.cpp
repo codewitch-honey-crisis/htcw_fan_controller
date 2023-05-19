@@ -112,6 +112,11 @@ void fan_controller::pwm_duty(uint16_t value) {
         m_pwm_callback(m_pwm_duty,m_pwm_callback_state);
     }
 }
+// reports the RPM currently being targeted, or NAN
+float fan_controller::target_rpm() const {
+    return m_target_rpm;
+}
+
 // call in a loop to keep the fan updating
 void fan_controller::update() {
     if(0>m_tach_pin) {

@@ -71,6 +71,8 @@ typedef void (*fan_controller_pwm_callback)(uint16_t duty, void* state);
         uint16_t pwm_duty() const;
         // set the PWM duty
         void pwm_duty(uint16_t value);
+        // reports the RPM currently being targeted, or NAN
+        float target_rpm() const;
         // call in a loop to keep the fan updating
         void update();
         // gets the kp value. Used for tuning the adaptive PI(D) algorithm
@@ -217,6 +219,10 @@ struct fan_controller final {
         if (m_pwm_callback != nullptr) {
             m_pwm_callback(m_pwm_duty, m_pwm_callback_state);
         }
+    }
+    // reports the RPM currently being targeted, or NAN
+    float target_rpm() const {
+        return m_target_rpm;
     }
     // call in a loop to keep the fan updating
     void update() {
@@ -421,6 +427,10 @@ struct fan_controller<-1,TicksPerRevolution> final {
         if (m_pwm_callback != nullptr) {
             m_pwm_callback(m_pwm_duty, m_pwm_callback_state);
         }
+    }
+    // reports the RPM currently being targeted, or NAN
+    float target_rpm() const {
+        return m_target_rpm;
     }
     // call in a loop to keep the fan updating
     void update() {
