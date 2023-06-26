@@ -59,6 +59,8 @@ typedef void (*fan_controller_pwm_callback)(uint16_t duty, void* state);
         fan_controller& operator=(fan_controller&& rhs);
         // initialize the library
         bool initialize();
+        // indicates whether or not the fan is initialized
+        bool initialized() const;
         // deinitialize the library
         void deinitialize();
         // retrieve the maximum RPM
@@ -186,6 +188,11 @@ struct fan_controller final {
         }
         return true;
     }
+    // indicates whether or not the fan is initialized
+    bool initialized() const {
+        return m_initialized;
+    }
+        
     // deinitialize the library
     void deinitialize() {
         if (m_initialized) {
@@ -397,6 +404,11 @@ struct fan_controller<-1,TicksPerRevolution> final {
         }
         return true;
     }
+    // indicates whether or not the fan is initialized
+    bool initialized() const {
+        return m_initialized;
+    }
+        
     // deinitialize the library
     void deinitialize() {
         m_initialized = false;

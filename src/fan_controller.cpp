@@ -76,6 +76,11 @@ bool fan_controller::initialize() {
     }
     return true;
 }
+// indicates whether or not the fan is initialized
+bool fan_controller::initialized() const {
+    return m_initialized;
+}
+        
 // deinitalize the library
 void fan_controller::deinitialize() {
     if(m_initialized) {
